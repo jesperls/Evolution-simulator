@@ -2,8 +2,6 @@ import pygame
 from robit import *
 import random
 import os
-import threading
-import time
 
 WORLD_SIZE = (1024, 1024)
 SPAWN_PELLET = pygame.USEREVENT + 1
@@ -18,9 +16,10 @@ class World(object):
         self.font = pygame.font.SysFont("monospace", 15)
         self.agents = pygame.sprite.Group()
         self.pellets = pygame.sprite.Group()
+        self.everything = pygame.sprite.Group()
         self.config = config
-        self.spawn_pellets(100)
-        pygame.time.set_timer(SPAWN_PELLET, 1000)
+        # self.spawn_pellets(100)
+        # pygame.time.set_timer(SPAWN_PELLET, 1000)
 
     def run(self):
         while self.running:
@@ -29,11 +28,15 @@ class World(object):
                     self.running = False
                 if event.type == SPAWN_PELLET:
                     self.spawn_pellet()
-            self.update_agents()
+            if len(self.pellets) < 150:
+                self.spawn_pellets(100-len(self.pellets))
             if len(self.agents) < 10:
                 genome = RobitGenome(1)
                 genome.configure_new(self.config.genome_config)
-                self.agents.add(RobotAgent(genome, self.config, random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1])))
+                new_agent = RobotAgent(genome, self.config, random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1]))
+                self.agents.add(new_agent)
+                self.everything.add(new_agent)
+            self.update_agents()
             self.render()
 
     def close(self):
@@ -44,8 +47,6 @@ class World(object):
         self.draw_pellets()
         self.draw_agents()
         pygame.display.flip()
-        if len(self.pellets) < 75:
-            self.spawn_pellets(1)
         # self.clock.tick(20)
     
     def draw_agents(self):
@@ -54,11 +55,12 @@ class World(object):
             for b in agent.bullets:
                 self.screen.blit(b.image, b.rect)
             for r in agent.vision_rects:
-                pygame.draw.rect(self.screen, (255, 0, 0), r, 1)
+                pygame.draw.rect(self.screen, (0, 255, 0), r, 1)
             
             pygame.draw.line(self.screen, (255, 0, 0), (int(agent.rect.center[0]-agent.width), int(agent.rect.center[1]-agent.height-4)), (int(agent.rect.center[0]+agent.width), int(agent.rect.center[1]-agent.height-4)), 1)
-            pygame.draw.line(self.screen, (200, 200, 0), (int(agent.rect.center[0]-agent.width), int(agent.rect.center[1]-agent.height)), (int(agent.rect.center[0]+(agent.stamina/100)*agent.width*2-agent.width), int(agent.rect.center[1]-agent.height)), 1)
             pygame.draw.line(self.screen, (0, 255, 0), (int(agent.rect.center[0]-agent.width), int(agent.rect.center[1]-agent.height-4)), (int(agent.rect.center[0]+(agent.health/100)*agent.width*2-agent.width), int(agent.rect.center[1]-agent.height-4)), 1)
+            if agent.stamina > 0:
+                pygame.draw.line(self.screen, (200, 200, 0), (int(agent.rect.center[0]-agent.width), int(agent.rect.center[1]-agent.height)), (int(agent.rect.center[0]+(agent.stamina/100)*agent.width*2-agent.width), int(agent.rect.center[1]-agent.height)), 1)
 
     def draw_pellets(self):
         for pellet in self.pellets:
@@ -69,55 +71,37 @@ class World(object):
             self.spawn_pellet()
     
     def spawn_pellet(self, size = 20):
-        self.pellets.add(Pellet(random.randint(0, WORLD_SIZE[0]-20), random.randint(0, WORLD_SIZE[1]-20), size))
+        pellet = Pellet(random.randint(0, WORLD_SIZE[0]-20), random.randint(0, WORLD_SIZE[1]-20), size)
+        self.pellets.add(pellet)
+        self.everything.add(pellet)
 
     def update_agents(self):
-        threads = []
         for agent in self.agents:
-            threads.append(threading.Thread(target=self.update_agent, args=(agent,)))
-            threads[-1].start()
-        
-        for thread in threads:
-            thread.join()
+            self.update_agent(agent)
 
-    def update_agent(self, agent): #TODO CONSIDER ADDING THREAD SAFETY
+    def update_agent(self, agent):
         self.get_agent_action(agent)
         agent.update()
 
         if agent.health <= 0 or agent.idle_timer > 60:
             pygame.sprite.Sprite.kill(agent)
-            # self.agents.add(PlayerAgent(random.randint(0, WORLD_SIZE[0] - 20), random.randint(0, WORLD_SIZE[1] - 20)))
+            return
 
-        for i in self.pellets:
-            pellet = pygame.sprite.collide_mask(agent, i)
-            if pellet:
-                pygame.sprite.Sprite.kill(i)
-                agent.change_stamina(i.size*2)
-                # agent.change_health(5)
+        pellet = pygame.sprite.spritecollideany(agent, self.pellets)
+        if pellet:
+            agent.change_stamina(pellet.size*2)
+            pygame.sprite.Sprite.kill(pellet)
         
-        for i in self.agents:
-            if i != agent and agent.collide(i) and agent.type == "robot" and i.type == "robot" and agent.breeding_cooldown == 0 and i.breeding_cooldown == 0:
-                agent.genome.fitness += 10
-                i.breeding_cooldown = 500
-                agent.breeding_cooldown = 500
-                genetic_distance = agent.genome.distance(i.genome, self.config.genome_config) * 1.5
-                agent.change_health(-genetic_distance)
-                i.change_health(-genetic_distance)
-                genome = RobitGenome(1)
-                genome.configure_crossover(agent.genome, i.genome, self.config.genome_config)
-                baby = RobotAgent(genome, self.config, agent.rect.center[0], agent.rect.center[1])
-                baby.stamina = min((agent.stamina + i.stamina) / 2 + 20, 100)
-                self.agents.add(baby)
-
-                
+        partner = agent.collide_agent(self.agents)
+        if partner and agent.breeding_cooldown == 0 and partner.breeding_cooldown == 0:
+            self.agents.add(agent.breed(partner))
 
     def get_agent_action(self, agent):
         if agent.type == "player":
             agent.get_action(pygame.key.get_pressed())
         else:
             agent.vision_rects = []
-            vision = agent.vision(self.pellets)
-            vision.extend(agent.vision(self.agents))
+            vision = agent.vision(self.everything)
             vision.extend([agent.rotation, agent.stamina, agent.health, agent.breeding_cooldown])
             agent.get_action(vision)
 

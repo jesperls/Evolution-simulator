@@ -56,11 +56,9 @@ class Pellet(pygame.sprite.Sprite):
     def __init__(self, x, y, size):
         super().__init__()
         self.type = "pellet"
-        # self.surf = pygame.Surface((10, 10))
         self.image = pygame.image.load("Assets/Images/Pellet/pellet.png")
         self.image = pygame.transform.scale(self.image, (20, 20))
         self.width, self.height = self.image.get_size()
-        # self.surf.fill((255, 255, 0))
         self.rect = self.image.get_rect()
         self.mask = pygame.mask.from_surface(self.image)
         self.rect.x = x
@@ -70,7 +68,6 @@ class Pellet(pygame.sprite.Sprite):
 class Agent(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        # self.surf = pygame.Surface((10, 10))
         self.origin_image = pygame.image.load("Assets/Images/agent/Ship.png")
         self.origin_image = pygame.transform.scale(self.origin_image, (20, 15))
         self.image = self.origin_image
@@ -84,7 +81,7 @@ class Agent(pygame.sprite.Sprite):
         self.speed = 3
         self.health = 100
         self.stamina = 100
-        self.vision_range = 5
+        self.vision_range = 10
         self.cooldown = 0
         self.breeding_cooldown = 0
         self.idle_timer = 0
@@ -111,11 +108,14 @@ class Agent(pygame.sprite.Sprite):
             self.rotation -= math.pi*2
         if self.rotation < 0:
             self.rotation += math.pi*2
+        self.update_mask()
+        self.change_stamina(-0.1)
+    
+    def update_mask(self):
         self.image = pygame.transform.rotate(self.origin_image, self.rotation*180/math.pi)
         self.rot_rect = self.image.get_rect()
         self.rot_rect.center = self.rect.center
         self.rect = self.rot_rect
-        self.change_stamina(-0.1)
 
     def change_stamina(self, amount):
         self.stamina += amount
@@ -129,24 +129,20 @@ class Agent(pygame.sprite.Sprite):
         if self.health > 100:
             self.health = 100
     
-    # def get_rotated(self):
-    #     self.rot_image = pygame.transform.rotate(self.image, self.rotation*180/math.pi)
-    #     self.rot_rect = self.rot_image.get_rect()
-    #     self.rot_rect.center = self.rect.center
-    #     return self.rot_image, self.rot_rect
-    
     def update(self):
         for b in self.bullets:
             b.update()
             if b.lifetime <= 0:
                 self.bullets.remove(b)
+
         if self.cooldown > 0:
             self.cooldown -= 1
         if self.breeding_cooldown > 0:
             self.breeding_cooldown -= 1
-        self.change_stamina(-0.01)
         if self.stamina <= 0: 
             self.health -= 1
+
+        self.change_stamina(-0.01)
 
         if self.rect.x > 1024 - self.rect.width:
             self.rect.x = 1024 - self.rect.width
@@ -159,18 +155,14 @@ class Agent(pygame.sprite.Sprite):
     
     def vision(self, sprites):
         vision = []
-        # self.vision_rects = []
-        # start = time.time()
         scan_sprite = pygame.sprite.Sprite()
-        scan_sprite.rect = pygame.Rect(0, 0, 20, 20)
+        scan_sprite.rect = pygame.Rect(0, 0, 10, 10)
         for i in np.arange(0, 360, 22.5):
             vision.append(self.get_ray(i, scan_sprite, sprites))
-        # print(time.time() - start)
         return vision
     
     def get_ray(self, angle, scan_sprite, sprites):
         angle = math.radians(angle)
-        origin = self.rect.center
         x = self.rect.center[0] - scan_sprite.rect.width/2
         y = self.rect.center[1] - scan_sprite.rect.height/2
         x_delta = round(scan_sprite.rect.width * math.cos(angle) * 1.5)
@@ -180,31 +172,41 @@ class Agent(pygame.sprite.Sprite):
             y -= y_delta
             scan_sprite.rect.center = (x, y)
             sprite = pygame.sprite.spritecollideany(scan_sprite, sprites)
+            # self.vision_rects.append(pygame.Rect(x, y, scan_sprite.rect.width, scan_sprite.rect.height))
             if sprite != None and sprite != self:
-                # self.vision_rects.append(pygame.Rect(x, y, scan_sprite.rect.width, scan_sprite.rect.height))
-
+                self.vision_rects.append(pygame.Rect(x, y, scan_sprite.rect.width, scan_sprite.rect.height))
                 if sprite.type == "robot":
-                    return self.genome.distance(sprite.genome, self.config.genome_config)
+                    return self.genome.distance(sprite.genome, self.config.genome_config) + 10
                 else:
-                    return 1
+                    return 2
+            if scan_sprite.rect.x < 0 or scan_sprite.rect.x + scan_sprite.rect.width > 1024 or scan_sprite.rect.y < 0 or scan_sprite.rect.y + scan_sprite.rect.height > 1024:
+                self.vision_rects.append(pygame.Rect(x, y, scan_sprite.rect.width, scan_sprite.rect.height))
+                return 1
         return 0
-
-            # for s in sprites:
-            #     loops += 1
-            #     # if x < s.rect.x + s.rect.width and x > s.rect.x and y < s.rect.y + s.rect.height and y > s.rect.y and s != self:
-            #     if s.rect.collidepoint(x, y) and s != self:
-            #         self.vision_rects.append(pygame.Rect(x-2.5, y-2.5, 5, 5))
-            #         if s.type == "robot":
-            #             self.rect.center = origin
-            #             return self.genome.distance(s.genome, self.config.genome_config)
-            #         else:
-            #             self.rect.center = origin
-                        # return 1
     
     def collide(self, other):
         if pygame.sprite.collide_mask(self, other):
             return True
         return False
+    
+    def collide_agent(self, others):
+        other = pygame.sprite.spritecollideany(self, others)
+        if other and other != self and self.type == "robot" and other.type == "robot":
+            return other
+        return False
+
+    def breed(self, partner):
+        self.genome.fitness += 10
+        partner.breeding_cooldown = 500
+        self.breeding_cooldown = 500
+        genetic_distance = self.genome.distance(partner.genome, self.config.genome_config)
+        self.change_health(-genetic_distance * 1.5)
+        partner.change_health(-genetic_distance * 1.5)
+        genome = RobitGenome(1)
+        genome.configure_crossover(self.genome, partner.genome, self.config.genome_config)
+        baby = RobotAgent(genome, self.config, self.rect.center[0], self.rect.center[1])
+        baby.stamina = min((self.stamina + partner.stamina) / 2 + 15, 100)
+        return baby
 
 class RobotAgent(Agent):
     def __init__(self, genome, config, x, y):

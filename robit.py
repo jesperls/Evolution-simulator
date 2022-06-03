@@ -128,6 +128,7 @@ class Agent(pygame.sprite.Sprite):
             self.stamina = 100
         if self.stamina < 0:
             self.stamina = 0
+            self.change_health(amount)
 
     def change_health(self, amount):
         self.health += amount

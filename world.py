@@ -21,7 +21,7 @@ class World(object):
         
         self.config = config
         self.spawn_pellets(100)
-        pygame.time.set_timer(SPAWN_PELLET, 500)
+        pygame.time.set_timer(SPAWN_PELLET, 450)
 
     def run(self):
         while self.running:
@@ -30,8 +30,8 @@ class World(object):
                     self.running = False
                 if event.type == SPAWN_PELLET:
                     self.spawn_pellet()
-            if len(self.pellets) < 20:
-                self.spawn_pellets(20-len(self.pellets))
+            # if len(self.pellets) < 20:
+            #     self.spawn_pellets(20-len(self.pellets))
             if len(self.agents) < 10:
                 genome = RobitGenome(1)
                 genome.configure_new(self.config.genome_config)

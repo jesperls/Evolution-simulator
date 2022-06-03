@@ -16,10 +16,12 @@ class World(object):
         self.font = pygame.font.SysFont("monospace", 15)
         self.agents = pygame.sprite.Group()
         self.pellets = pygame.sprite.Group()
+        self.bullets = pygame.sprite.Group()
         self.everything = pygame.sprite.Group()
+        
         self.config = config
-        # self.spawn_pellets(100)
-        # pygame.time.set_timer(SPAWN_PELLET, 1000)
+        self.spawn_pellets(100)
+        pygame.time.set_timer(SPAWN_PELLET, 500)
 
     def run(self):
         while self.running:
@@ -28,12 +30,12 @@ class World(object):
                     self.running = False
                 if event.type == SPAWN_PELLET:
                     self.spawn_pellet()
-            if len(self.pellets) < 150:
-                self.spawn_pellets(100-len(self.pellets))
+            if len(self.pellets) < 20:
+                self.spawn_pellets(20-len(self.pellets))
             if len(self.agents) < 10:
                 genome = RobitGenome(1)
                 genome.configure_new(self.config.genome_config)
-                new_agent = RobotAgent(genome, self.config, random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1]))
+                new_agent = RobotAgent(genome, self.config, random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1]), self.everything, self.bullets)
                 self.agents.add(new_agent)
                 self.everything.add(new_agent)
             self.update_agents()
@@ -52,8 +54,6 @@ class World(object):
     def draw_agents(self):
         for agent in self.agents:
             self.screen.blit(agent.image, agent.rect)
-            for b in agent.bullets:
-                self.screen.blit(b.image, b.rect)
             for r in agent.vision_rects:
                 pygame.draw.rect(self.screen, (0, 255, 0), r, 1)
             
@@ -61,6 +61,8 @@ class World(object):
             pygame.draw.line(self.screen, (0, 255, 0), (int(agent.rect.center[0]-agent.width), int(agent.rect.center[1]-agent.height-4)), (int(agent.rect.center[0]+(agent.health/100)*agent.width*2-agent.width), int(agent.rect.center[1]-agent.height-4)), 1)
             if agent.stamina > 0:
                 pygame.draw.line(self.screen, (200, 200, 0), (int(agent.rect.center[0]-agent.width), int(agent.rect.center[1]-agent.height)), (int(agent.rect.center[0]+(agent.stamina/100)*agent.width*2-agent.width), int(agent.rect.center[1]-agent.height)), 1)
+        for b in self.bullets:
+            self.screen.blit(b.image, b.rect)
 
     def draw_pellets(self):
         for pellet in self.pellets:
@@ -70,8 +72,11 @@ class World(object):
         for i in range(amount):
             self.spawn_pellet()
     
-    def spawn_pellet(self, size = 20):
-        pellet = Pellet(random.randint(0, WORLD_SIZE[0]-20), random.randint(0, WORLD_SIZE[1]-20), size)
+    def spawn_pellet(self, size = 20, x = 0, y = 0):
+        if x + y == 0:
+            x = random.randint(0, WORLD_SIZE[0]-20)
+            y = random.randint(0, WORLD_SIZE[1]-20)
+        pellet = Pellet(x, y, size)
         self.pellets.add(pellet)
         self.everything.add(pellet)
 
@@ -82,9 +87,13 @@ class World(object):
     def update_agent(self, agent):
         self.get_agent_action(agent)
         agent.update()
+        if agent.got_shot():
+            if agent.stamina > 0:
+                self.spawn_pellet(agent.stamina, agent.rect.x, agent.rect.y)
+            return
 
         if agent.health <= 0 or agent.idle_timer > 60:
-            pygame.sprite.Sprite.kill(agent)
+            agent.kill()
             return
 
         pellet = pygame.sprite.spritecollideany(agent, self.pellets)
@@ -102,7 +111,7 @@ class World(object):
         else:
             agent.vision_rects = []
             vision = agent.vision(self.everything)
-            vision.extend([agent.rotation, agent.stamina, agent.health, agent.breeding_cooldown])
+            vision.extend([agent.rotation, agent.stamina, agent.health, agent.breeding_cooldown, agent.cooldown])
             agent.get_action(vision)
 
 
@@ -114,7 +123,7 @@ if __name__ == "__main__":
                         config_path)
     world = World(config)
 
-    world.agents.add(PlayerAgent(random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1])))
+    # world.agents.add(PlayerAgent(random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1])))
     # for i in range(10):
     #     genome = RobitGenome(i)
     #     genome.configure_new(config.genome_config)

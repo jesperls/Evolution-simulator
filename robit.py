@@ -89,6 +89,7 @@ class Agent(pygame.sprite.Sprite):
         self.idle_timer = 0
         self.bullets = []
         self.vision_rects = []
+        self.memory = [0 for _ in range(10)]
     
     def move_forward(self, speed):
         self.rect.x += round(speed * math.cos(self.rotation))
@@ -292,6 +293,8 @@ class RobotAgent(Agent):
         if output[3] > 30:
             self.shoot()
             idle = False
+        self.memory = output[4:14]
+
         if idle:
             self.idle_timer += 1
         else:

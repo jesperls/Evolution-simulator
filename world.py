@@ -113,6 +113,7 @@ class World(object):
             agent.vision_rects = []
             vision = agent.vision(self.everything)
             vision.extend([agent.rotation, agent.stamina, agent.health, agent.breeding_cooldown, agent.cooldown])
+            vision.extend(agent.memory)
             agent.get_action(vision)
 
 

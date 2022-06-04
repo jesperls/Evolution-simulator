@@ -21,7 +21,7 @@ class World(object):
         
         self.config = config
         self.spawn_pellets(100)
-        pygame.time.set_timer(SPAWN_PELLET, 450)
+        pygame.time.set_timer(SPAWN_PELLET, 333)
 
     def run(self):
         while self.running:
@@ -29,15 +29,17 @@ class World(object):
                 if event.type == pygame.QUIT:
                     self.running = False
                 if event.type == SPAWN_PELLET:
-                    self.spawn_pellet()
+                    self.spawn_pellets(1)
             # if len(self.pellets) < 20:
             #     self.spawn_pellets(20-len(self.pellets))
-            if len(self.agents) < 10:
+            if len(self.agents) < 8:
                 genome = RobitGenome(1)
                 genome.configure_new(self.config.genome_config)
                 new_agent = RobotAgent(genome, self.config, random.randint(0, WORLD_SIZE[0]), random.randint(0, WORLD_SIZE[1]), self.everything, self.bullets)
                 self.agents.add(new_agent)
                 self.everything.add(new_agent)
+            if len(self.agents) > 16:
+                random.choice(self.agents.sprites()).kill()
             self.update_agents()
             self.render()
 
@@ -70,7 +72,8 @@ class World(object):
     
     def spawn_pellets(self, amount):
         for i in range(amount):
-            self.spawn_pellet()
+            if len(self.pellets) < 200:
+                self.spawn_pellet()
     
     def spawn_pellet(self, size = 20, x = 0, y = 0):
         if x + y == 0:
@@ -87,12 +90,10 @@ class World(object):
     def update_agent(self, agent):
         self.get_agent_action(agent)
         agent.update()
-        if agent.got_shot():
-            if agent.stamina > 0:
-                self.spawn_pellet(agent.stamina, agent.rect.x, agent.rect.y)
-            return
 
         if agent.health <= 0 or agent.idle_timer > 60:
+            if agent.stamina > 0 and agent.idle_timer <= 60:
+                self.spawn_pellet(agent.stamina, agent.rect.x, agent.rect.y)
             agent.kill()
             return
 

@@ -150,6 +150,7 @@ class Agent(pygame.sprite.Sprite):
             self.health -= 0.5
 
         self.change_stamina(-0.01)
+        self.got_shot()
 
         if self.rect.x > 1024 - self.rect.width:
             self.rect.x = 1024 - self.rect.width
@@ -164,12 +165,43 @@ class Agent(pygame.sprite.Sprite):
             self.genome.fitness += 0.01
 
     def vision(self, sprites):
-        vision = []
+        # vision = []
+        walls = []
+        agents = []
+        pellets = []
+        bullets = []
         scan_sprite = pygame.sprite.Sprite()
         scan_sprite.rect = pygame.Rect(0, 0, 10, 10)
         for i in np.arange(0, 360, 22.5):
-            vision.append(self.get_ray(i, scan_sprite, sprites))
-        return vision
+            hit = self.get_ray(i, scan_sprite, sprites)
+            if hit == 0:
+                walls.append(0)
+                agents.append(0)
+                pellets.append(0)
+                bullets.append(0)
+            elif hit == 1:
+                walls.append(1)
+                agents.append(0)
+                pellets.append(0)
+                bullets.append(0)
+            elif hit == 2:
+                walls.append(0)
+                agents.append(0)
+                pellets.append(1)
+                bullets.append(0)
+            elif hit == 3:
+                walls.append(0)
+                agents.append(0)
+                pellets.append(0)
+                bullets.append(1)
+            elif hit > 3:
+                walls.append(hit)
+                agents.append(0)
+                pellets.append(0)
+                bullets.append(0)
+            
+            # vision.append(self.get_ray(i, scan_sprite, sprites))
+        return walls + agents + bullets + pellets
     
     def get_ray(self, angle, scan_sprite, sprites):
         angle = math.radians(angle) + self.rotation
@@ -188,7 +220,7 @@ class Agent(pygame.sprite.Sprite):
                 if sprite.type == "robot":
                     return self.genome.distance(sprite.genome, self.config.genome_config) + 10
                 elif sprite.type == "bullet":
-                    return 5
+                    return 3
                 else:
                     return 2
             if scan_sprite.rect.x < 0 or scan_sprite.rect.x + scan_sprite.rect.width > 1024 or scan_sprite.rect.y < 0 or scan_sprite.rect.y + scan_sprite.rect.height > 1024:
@@ -204,7 +236,7 @@ class Agent(pygame.sprite.Sprite):
     def got_shot(self):
         bullet = pygame.sprite.spritecollideany(self, self.global_bullets)
         if bullet != None and bullet not in self.bullets:
-            self.kill()
+            self.change_health(-50)
             return True
         return False
     
@@ -219,12 +251,12 @@ class Agent(pygame.sprite.Sprite):
         partner.breeding_cooldown = 1000
         self.breeding_cooldown = 1000
         genetic_distance = self.genome.distance(partner.genome, self.config.genome_config)
-        self.change_health(-genetic_distance)
-        partner.change_health(-genetic_distance)
+        self.change_health(-genetic_distance * 1.5)
+        partner.change_health(-genetic_distance * 1.5)
         genome = RobitGenome(1)
         genome.configure_crossover(self.genome, partner.genome, self.config.genome_config)
         baby = RobotAgent(genome, self.config, self.rect.center[0], self.rect.center[1], self.everything, self.global_bullets)
-        baby.stamina = min((self.stamina + partner.stamina) / 2 + 5, 100)
+        baby.stamina = min((self.stamina + partner.stamina) / 2, 100)
         return baby
     
     def kill(self):
